@@ -137,10 +137,14 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
     classes = [];
     response = "next</a>"
     pageCount = 0
+    totalClasses = 0
     while "next</a>" in response:
         response = br.submit().read();
-        #print response
         soup = BeautifulSoup(response)
+        
+        if pageCount == 0:
+            totalClasses = int(soup.find('td', colspan="13").find_all('b')[2].getText())
+        
         tbody = soup.find('td', class_='even').parent.parent
 
         for tr in tbody.find_all('tr'):
@@ -259,7 +263,7 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
                                 c.labs.append(int(tr.find_all('td')[2].getText()))
             classes.append(c)
             if verbose:
-                print "Finished "+str(c.classNum)
+                print "Finished class "+str(c.classNum)+", the "+str(len(classes))+" of "+str(totalClasses)
         br.select_form(name='resultsForm')
         br.form.set_all_readonly(False)
         br['action'] = "next"

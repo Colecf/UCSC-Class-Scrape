@@ -1,10 +1,11 @@
-import re;
-import mechanize;
+import re
+import mechanize
 from bs4 import BeautifulSoup
-import urllib2;
+import urllib2
 import datetime
 import sys
 import json
+from sets import Set
 #For jsonifying python dates to javascript format
 #http://stackoverflow.com/questions/455580/json-datetime-between-python-and-javascript
 def handler(obj):
@@ -12,13 +13,35 @@ def handler(obj):
 		return obj.isoformat()
 	elif isinstance(obj, Class):
 		return obj.__dict__;
-	elif isinstance(obj, Term):
+	elif isinstance(obj, Day):
 		return obj.__dict__;
 	else:
 		raise TypeError, 'Object of type %s with value of %s is not JSON serializable' % (type(obj), repr(obj))
 
 br = mechanize.Browser()
 
+class Day:
+    def __init__(self):
+        self.day = 0
+        self.startTime = datetime.time(8, 0);
+        self.endTime = datetime.time(9, 45);
+    def dayString(self):
+        if self.day == 0:
+            return "Monday"
+        elif self.day == 1:
+            return "Tuesday"
+        elif self.day == 2:
+            return "Wednesday"
+        elif self.day == 3:
+            return "Thursday"
+        elif self.day == 4:
+            return "Friday"
+        elif self.day == 5:
+            return "Saturday"
+        elif self.day == 6:
+            return "Sunday"
+    def __str__(self):
+        return self.dayString()
 
 class Class:
     def __init__(self):
@@ -32,8 +55,6 @@ class Class:
         self.fullName = ""
         self.enrollmentReqs = ""
         self.days = []
-        self.startTime = datetime.time(8, 0);
-        self.endTime = datetime.time(9, 45);
         self.instructor = ""
         self.status = ""
         self.capacity = 0
@@ -53,38 +74,84 @@ class Class:
 			self.instructor+' '+self.status+' '+str(self.capacity)+' '+str(self.enrolled)+' '+self.location+\
 			' credits:'+str(self.credits) +' '+'['+(' '.join(self.ge))+']'
 
-def _sanitizeOptions(options, page):
-    soup = BeautifulSoup(page)
+def _sanitizeTerm(term, soup):
     try:
-        options['term'] = int(options['term'])
+        term = int(term)
     except ValueError:
         for termOption in soup.find('select', id='term_dropdown').findAll('option'):
-            if termOption.getText() == options['term']:
-                options['term'] = termOption['value']
+            if termOption.getText() == term:
+                term = termOption['value']
                 break
+    return term
 
-def readClasses(options):
+def _sanitizeStatus(regStatus):
+    if regStatus.lower() == "open" or regStatus.lower() == "o":
+        return "O"
+    return "all"
+
+subjects = Set(['ACEN', 'AMST', 'ANTH', 'APLX', 'AMS', 'ARAB', 'ART', 'ARTG',
+                'ASTR', 'BIOC', 'BIOL', 'BIOE', 'BME', 'CHEM', 'CHIN', 'CLEI',
+                'CLNI', 'CLTE', 'CMMU', 'CMPM', 'CMPE', 'CMPS', 'COWL', 'LTCR',
+                'CRES', 'CRWN', 'DANM', 'EART', 'ECON', 'EDUC', 'EE', 'ENGR',
+                'LTEL', 'ENVS', 'ETOX', 'FMST', 'FILM', 'FREN', 'LTFR',
+                'GAME', 'GERM', 'LTGE', 'GREE', 'LTGR', 'HEBR', 'HNDI',
+                'HIS', 'HAVC', 'HISC', 'HUMN', 'ISM', 'ITAL', 'LTIT', 'JAPN',
+                'JWST', 'KRSG', 'LAAD', 'LATN', 'LALS', 'LTIN', 'LGST', 'LING',
+                'LIT', 'MATH', 'MERR', 'METX', 'LTMO', 'MUSC', 'OAKS', 'OCEA', 'PHIL',
+                'PHYE', 'PHYS', 'POLI', 'PRTR', 'PORT', 'LTPR', 'PSYC', 'PUNJ',
+                'RUSS', 'SCIC', 'SOCD', 'SOCS', 'SOCY', 'SPAN', 'SPHS', 'SPSS',
+                'LTSP', 'STEV', 'TIM', 'THEA', 'UCDC', 'WMST', 'LTWL', 'WRIT', 'YIDD'])
+
+def _sanitizeSubject(subject):
+    if subject.lower() == 'all':
+        return 'all'
+    if subject in subjects:
+        return subject
+    return False
+
+def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
     br.open('https://pisa.ucsc.edu/class_search/')
-    _sanitizeOptions(options, br.response().read());
+    soup = BeautifulSoup(br.response().read())
+    
+    term = _sanitizeTerm(term, soup)
+    regStatus = _sanitizeStatus(regStatus)
+    subject = _sanitizeSubject(subject)
+    
     br.select_form(name='searchForm')
-    br['binds[:term]'] = [options['term']]
-    br['binds[:reg_status]'] = ['all'];
-    # They have two blank options, one is really blank (and they won't let you submit with it selected)
-    # and the second is 'all subjects', which we want.
-    br.find_control('binds[:subject]').get(nr=1).selected = True;
-
+    br['binds[:term]'] = [str(term)]
+    br['binds[:reg_status]'] = [regStatus]
+    br['binds[:title]'] = title
+    
+    if subject=='all':
+        # They have two blank options, one is really blank
+        # (and they won't let you submit with it selected)
+        # and the second is 'all subjects', which we want.
+        br.find_control('binds[:subject]').get(nr=1).selected = True;
+    
+    termString = ""
+    for termOption in soup.find('select', id='term_dropdown').findAll('option'):
+        if termOption['value'] == term:
+            termString = termOption.getText()
+            break
+    
+    classes = [];
     response = "next</a>"
-    while "next</a>" in response:
+    pageCount = 0
+    while pageCount < 3: #"next</a>" in response:
         response = br.submit().read();
         #print response
         soup = BeautifulSoup(response)
         tbody = soup.find('td', class_='even').parent.parent
-        classes = [];
+
         for tr in tbody.find_all('tr'):
             collumn = 0
             c = Class()
+            repeat = False
             for td in tr.find_all('td'):
                 if collumn==0:
+                    if len(classes) != 0 and int(td.a.getText()) == classes[-1].classNum:
+                        c = classes.pop()  # some classes meet on odd days and thus have multiple rows
+                        repeat = True
                     c.classLink = "https://pisa.ucsc.edu/class_search/"+td.a['href'];
                     c.classNum = int(td.a.getText());
                 elif collumn==1:
@@ -93,28 +160,50 @@ def readClasses(options):
                     c.classTitle = td.a.getText();
                 elif collumn==3:
                     c.classType = td.getText();
-                elif collumn==4:
+                elif collumn==4: # and collumn 5 technically
+                    dayStartTime = ""
+                    dayEndTime = ""
+                    timesString = tr.find_all('td')[5].getText()
+                    if ":" in timesString:
+                        times = timesString.split("-")
+                        startTimes = times[0].split(":")
+                        endTimes = times[1].split(":")
+                        hour = int(startTimes[0])
+                        if times[0][-2] == "A" and hour == 12:
+                            hour = 0
+                        elif times[0][-2] == "P" and hour != 12:
+                            hour = hour + 12
+                        dayStartTime = datetime.time(hour, int(startTimes[1][:2]))
+                        hour = int(endTimes[0])
+                        if times[1][-2] == "A" and hour == 12:
+                            hour = 0
+                        elif times[1][-2] == "P" and hour != 12:
+                            hour = hour + 12
+                        dayEndTime = datetime.time(hour, int(endTimes[1][:2]))
+                    else:
+                        dayStartTime = datetime.time(0, 0);
+                        dayEndTime = datetime.time(0, 0);
                     #Split by capital letters
-                    c.days = re.findall(r'[A-Z][^A-Z]*', td.getText());
-                elif collumn==5 and ":" in td.getText():
-                    times = td.getText().split("-")
-                    startTimes = times[0].split(":")
-                    endTimes = times[1].split(":")
-                    hour = int(startTimes[0])
-                    if times[0][-2] == "A" and hour == 12:
-                        hour = 0
-                    elif times[0][-2] == "P" and hour != 12:
-                        hour = hour + 12
-                    c.startTime = datetime.time(hour, int(startTimes[1][:2]))
-                    hour = int(endTimes[0])
-                    if times[1][-2] == "A" and hour == 12:
-                        hour = 0
-                    elif times[1][-2] == "P" and hour != 12:
-                        hour = hour + 12
-                    c.endTime = datetime.time(hour, int(endTimes[1][:2]))
-                elif collumn==5:
-                    c.startTime = td.getText()
-                    c.endTime = c.startTime
+                    days = re.findall(r'[A-Z][^A-Z]*', td.getText());
+                    for day in days:
+                        d = Day()
+                        if day == "M":
+                            d.day = 0
+                        if day == "Tu":
+                            d.day = 1
+                        if day == "W":
+                            d.day = 2
+                        if day == "Th":
+                            d.day = 3
+                        if day == "F":
+                            d.day = 4
+                        if day == "Sa":
+                            d.day = 5
+                        if day == "Su":
+                            d.day = 6
+                        d.startTime = dayStartTime
+                        d.endTime = dayEndTime
+                        c.days.append(d)
                 elif collumn==6:
                     c.instructor = td.getText();
                 elif collumn==7:
@@ -130,54 +219,56 @@ def readClasses(options):
                     c.materialsLink = td.input['onclick'][13:-12]
                 collumn=collumn+1
             
-            #Click the class link and read the units, ge's, and dates
-            infoPage = BeautifulSoup(urllib2.urlopen(c.classLink).read());
-            # ################# UNTESTED ####################
-            c.fullName = infoPage.find_all('table', class_="PALEVEL0SECONDARY")[0].find_all('tr')[1].td.getText().encode('ascii', 'ignore');
-            c.fullName = c.fullName[c.fullName.find('-')+5:]
-            
-            for table in infoPage.find_all('table', class_='detail_table'):
-                tableTitle = table.find_all('tr')[0].th.getText();
-                if tableTitle == "Class Details":
-                    c.credits = int(table.find_all('tr')[5].find_all('td')[1].getText()[0:1]);
-                    # need the encode to ascii because of &nbsp;
-                    c.ge = table.find_all('tr')[6].find_all('td')[1].getText().encode('ascii', 'ignore');
-                    if c.ge == "":
-                        c.ge = [];
-                    else:
-                        c.ge = c.ge.split(', ')
-                    c.career = table.find_all('tr')[1].find_all('td')[1].getText()
-                if tableTitle == "Description":
-                    c.description = table.find_all('tr')[1].td.getText();
-                if tableTitle == "Enrollment Requirements":
-                    c.enrollmentReqs = table.find_all('tr')[1].td.getText();
-                if tableTitle == "Class Notes":
-                    c.classNotes = table.find_all('tr')[1].td.getText();
-                if tableTitle == "Meeting Information":
-                    dateString = table.find_all('tr')[2].find_all('td')[3].getText();
-                    if dateString.find('-') == -1:
-                        c.startDate = ""
-                        c.endDate = ""
-                    else:
-                        startArray = dateString[:dateString.find("-")-1].split('/');
-                        endArray = dateString[dateString.find("-")+2:].split('/');
-                        c.startDate = datetime.date(int(startArray[2])+2000, int(startArray[0]), int(startArray[1]))
-                        c.endDate = datetime.date(int(endArray[2])+2000, int(endArray[0]), int(endArray[1]))
-                if tableTitle == "Associated Discussion Sections or Labs":
-                    for tr in table.find_all('tr'):
-                        #rows with actual data have the even or odd class
-                        if tr.has_attr('class'):
-                            c.labs.append(int(tr.find_all('td')[2].getText()))
+            if not repeat:
+                #Click the class link and read the units, ge's, and dates
+                infoPage = BeautifulSoup(urllib2.urlopen(c.classLink).read());
+                c.fullName = infoPage.find_all('table', class_="PALEVEL0SECONDARY")[0].find_all('tr')[1].td.getText().encode('ascii', 'ignore');
+                c.fullName = c.fullName[c.fullName.find('-')+5:]
+                
+                for table in infoPage.find_all('table', class_='detail_table'):
+                    tableTitle = table.find_all('tr')[0].th.getText();
+                    if tableTitle == "Class Details":
+                        c.credits = int(table.find_all('tr')[5].find_all('td')[1].getText()[0:1]);
+                        # need the encode to ascii because of &nbsp;
+                        c.ge = table.find_all('tr')[6].find_all('td')[1].getText().encode('ascii', 'ignore');
+                        if c.ge == "":
+                            c.ge = [];
+                        else:
+                            c.ge = c.ge.split(', ')
+                        c.career = table.find_all('tr')[1].find_all('td')[1].getText()
+                    if tableTitle == "Description":
+                        c.description = table.find_all('tr')[1].td.getText();
+                    if tableTitle == "Enrollment Requirements":
+                        c.enrollmentReqs = table.find_all('tr')[1].td.getText();
+                    if tableTitle == "Class Notes":
+                        c.classNotes = table.find_all('tr')[1].td.getText();
+                    if tableTitle == "Meeting Information":
+                        dateString = table.find_all('tr')[2].find_all('td')[3].getText();
+                        if dateString.find('-') == -1:
+                            c.startDate = ""
+                            c.endDate = ""
+                        else:
+                            startArray = dateString[:dateString.find("-")-1].split('/');
+                            endArray = dateString[dateString.find("-")+2:].split('/');
+                            c.startDate = datetime.date(int(startArray[2])+2000, int(startArray[0]), int(startArray[1]))
+                            c.endDate = datetime.date(int(endArray[2])+2000, int(endArray[0]), int(endArray[1]))
+                    if tableTitle == "Associated Discussion Sections or Labs":
+                        for tr in table.find_all('tr'):
+                            #rows with actual data have the even or odd class
+                            if tr.has_attr('class'):
+                                c.labs.append(int(tr.find_all('td')[2].getText()))
             classes.append(c)
-            print "Finished "+str(c.classNum)
+            if verbose:
+                print "Finished "+str(c.classNum)
         br.select_form(name='resultsForm')
         br.form.set_all_readonly(False)
         br['action'] = "next"
+        pageCount = pageCount+1
 
-    firstSpace = sys.argv[1].find(' ')+1
-    shortTermStr = sys.argv[1][firstSpace:sys.argv[1].find(' ', firstSpace)].lower() + sys.argv[1][:firstSpace-1]
+
     for c in classes:
-        c.term = shortTermStr
+        c.term = termString
+    return classes
 
 
 if __name__ == "__main__":
@@ -186,10 +277,10 @@ if __name__ == "__main__":
         print "Example: "+sys.argv[0]+" \"2015 Fall Quarter\""
         sys.exit(1)
 
-    if sys.argv[1][-8] != " Quarter":
+    if sys.argv[1][-8:] != " Quarter":
         sys.argv[1] = sys.argv[1]+" Quarter";
 
-    classses = readClasses({'term': sys.argv[1]})
+    classes = readClasses(term=sys.argv[1], verbose=True)
 
     f = open('classes.json', 'w')
     f.write(json.dumps(classes, default=handler))

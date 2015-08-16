@@ -12,9 +12,9 @@ def handler(obj):
 	if hasattr(obj, 'isoformat'):
 		return obj.isoformat()
 	elif isinstance(obj, Class):
-		return obj.__dict__;
+		return obj.__dict__
 	elif isinstance(obj, Day):
-		return obj.__dict__;
+		return obj.__dict__
 	else:
 		raise TypeError, 'Object of type %s with value of %s is not JSON serializable' % (type(obj), repr(obj))
 
@@ -23,8 +23,8 @@ br = mechanize.Browser()
 class Day:
     def __init__(self):
         self.day = 0
-        self.startTime = datetime.time(8, 0);
-        self.endTime = datetime.time(9, 45);
+        self.startTime = datetime.time(8, 0)
+        self.endTime = datetime.time(9, 45)
     def dayString(self):
         if self.day == 0:
             return "Monday"
@@ -66,7 +66,7 @@ class Class:
         self.description = ""
         self.startDate = ""
         self.endDate = ""
-        self.labs = [];
+        self.labs = []
         self.carreer = ""
     
 	def __str__(self):
@@ -126,7 +126,7 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
         # They have two blank options, one is really blank
         # (and they won't let you submit with it selected)
         # and the second is 'all subjects', which we want.
-        br.find_control('binds[:subject]').get(nr=1).selected = True;
+        br.find_control('binds[:subject]').get(nr=1).selected = True
     
     termString = ""
     for termOption in soup.find('select', id='term_dropdown').findAll('option'):
@@ -134,12 +134,12 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
             termString = termOption.getText()
             break
     
-    classes = [];
+    classes = []
     response = "next</a>"
     pageCount = 0
     totalClasses = 0
     while "next</a>" in response:
-        response = br.submit().read();
+        response = br.submit().read()
         soup = BeautifulSoup(response)
         
         if pageCount == 0:
@@ -156,14 +156,14 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
                     if len(classes) != 0 and int(td.a.getText()) == classes[-1].classNum:
                         c = classes.pop()  # some classes meet on odd days and thus have multiple rows
                         repeat = True
-                    c.classLink = "https://pisa.ucsc.edu/class_search/"+td.a['href'];
-                    c.classNum = int(td.a.getText());
+                    c.classLink = "https://pisa.ucsc.edu/class_search/"+td.a['href']
+                    c.classNum = int(td.a.getText())
                 elif collumn==1:
-                    c.classID = td.getText();
+                    c.classID = td.getText()
                 elif collumn==2:
-                    c.classTitle = td.a.getText();
+                    c.classTitle = td.a.getText()
                 elif collumn==3:
-                    c.classType = td.getText();
+                    c.classType = td.getText()
                 elif collumn==4: # and collumn 5 technically
                     dayStartTime = ""
                     dayEndTime = ""
@@ -185,10 +185,10 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
                             hour = hour + 12
                         dayEndTime = datetime.time(hour, int(endTimes[1][:2]))
                     else:
-                        dayStartTime = datetime.time(0, 0);
-                        dayEndTime = datetime.time(0, 0);
+                        dayStartTime = datetime.time(0, 0)
+                        dayEndTime = datetime.time(0, 0)
                     #Split by capital letters
-                    days = re.findall(r'[A-Z][^A-Z]*', td.getText());
+                    days = re.findall(r'[A-Z][^A-Z]*', td.getText())
                     for day in days:
                         d = Day()
                         if day == "M":
@@ -209,51 +209,51 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
                         d.endTime = dayEndTime
                         c.days.append(d)
                 elif collumn==6:
-                    c.instructor = td.getText();
+                    c.instructor = td.getText()
                 elif collumn==7:
-                    c.status = td.center.img['alt'];
+                    c.status = td.center.img['alt']
                 elif collumn==8:
-                    c.capacity = int(td.getText());
+                    c.capacity = int(td.getText())
                 elif collumn==9:
-                    c.enrolled = int(td.getText());
+                    c.enrolled = int(td.getText())
                 #skip 10 because available seats can be calculated
                 elif collumn==11:
-                    c.location = td.getText();
+                    c.location = td.getText()
                 elif collumn==12:
                     c.materialsLink = td.input['onclick'][13:-12]
                 collumn=collumn+1
             
             if not repeat:
                 #Click the class link and read the units, ge's, and dates
-                infoPage = BeautifulSoup(urllib2.urlopen(c.classLink).read());
-                c.fullName = infoPage.find_all('table', class_="PALEVEL0SECONDARY")[0].find_all('tr')[1].td.getText().encode('ascii', 'ignore');
+                infoPage = BeautifulSoup(urllib2.urlopen(c.classLink).read())
+                c.fullName = infoPage.find_all('table', class_="PALEVEL0SECONDARY")[0].find_all('tr')[1].td.getText().encode('ascii', 'ignore')
                 c.fullName = c.fullName[c.fullName.find('-')+5:]
                 
                 for table in infoPage.find_all('table', class_='detail_table'):
-                    tableTitle = table.find_all('tr')[0].th.getText();
+                    tableTitle = table.find_all('tr')[0].th.getText()
                     if tableTitle == "Class Details":
-                        c.credits = int(table.find_all('tr')[5].find_all('td')[1].getText()[0:1]);
+                        c.credits = int(table.find_all('tr')[5].find_all('td')[1].getText()[0:1])
                         # need the encode to ascii because of &nbsp;
-                        c.ge = table.find_all('tr')[6].find_all('td')[1].getText().encode('ascii', 'ignore');
+                        c.ge = table.find_all('tr')[6].find_all('td')[1].getText().encode('ascii', 'ignore')
                         if c.ge == "":
-                            c.ge = [];
+                            c.ge = []
                         else:
                             c.ge = c.ge.split(', ')
                         c.career = table.find_all('tr')[1].find_all('td')[1].getText()
                     if tableTitle == "Description":
-                        c.description = table.find_all('tr')[1].td.getText();
+                        c.description = table.find_all('tr')[1].td.getText()
                     if tableTitle == "Enrollment Requirements":
-                        c.enrollmentReqs = table.find_all('tr')[1].td.getText();
+                        c.enrollmentReqs = table.find_all('tr')[1].td.getText()
                     if tableTitle == "Class Notes":
-                        c.classNotes = table.find_all('tr')[1].td.getText();
+                        c.classNotes = table.find_all('tr')[1].td.getText()
                     if tableTitle == "Meeting Information":
-                        dateString = table.find_all('tr')[2].find_all('td')[3].getText();
+                        dateString = table.find_all('tr')[2].find_all('td')[3].getText()
                         if dateString.find('-') == -1:
                             c.startDate = ""
                             c.endDate = ""
                         else:
-                            startArray = dateString[:dateString.find("-")-1].split('/');
-                            endArray = dateString[dateString.find("-")+2:].split('/');
+                            startArray = dateString[:dateString.find("-")-1].split('/')
+                            endArray = dateString[dateString.find("-")+2:].split('/')
                             c.startDate = datetime.date(int(startArray[2])+2000, int(startArray[0]), int(startArray[1]))
                             c.endDate = datetime.date(int(endArray[2])+2000, int(endArray[0]), int(endArray[1]))
                     if tableTitle == "Associated Discussion Sections or Labs":
@@ -282,7 +282,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if sys.argv[1][-8:] != " Quarter":
-        sys.argv[1] = sys.argv[1]+" Quarter";
+        sys.argv[1] = sys.argv[1]+" Quarter"
 
     classes = readClasses(term=sys.argv[1], verbose=True)
 

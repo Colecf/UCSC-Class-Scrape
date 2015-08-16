@@ -78,6 +78,8 @@ def _sanitizeTerm(term, soup):
     try:
         term = int(term)
     except ValueError:
+        if term[-8:] != " Quarter":
+                term = term+" Quarter"
         for termOption in soup.find('select', id='term_dropdown').findAll('option'):
             if termOption.getText() == term:
                 term = termOption['value']
@@ -116,6 +118,9 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
     term = _sanitizeTerm(term, soup)
     regStatus = _sanitizeStatus(regStatus)
     subject = _sanitizeSubject(subject)
+
+    if term==False or regStatus==False or subject==False:
+        return False
     
     br.select_form(name='searchForm')
     br['binds[:term]'] = [str(term)]
@@ -280,9 +285,6 @@ if __name__ == "__main__":
         print "Usage: "+sys.argv[0]+" term"
         print "Example: "+sys.argv[0]+" \"2015 Fall Quarter\""
         sys.exit(1)
-
-    if sys.argv[1][-8:] != " Quarter":
-        sys.argv[1] = sys.argv[1]+" Quarter"
 
     classes = readClasses(term=sys.argv[1], verbose=True)
 

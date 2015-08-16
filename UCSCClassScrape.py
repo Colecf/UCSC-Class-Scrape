@@ -137,7 +137,7 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
     classes = [];
     response = "next</a>"
     pageCount = 0
-    while pageCount < 3: #"next</a>" in response:
+    while "next</a>" in response:
         response = br.submit().read();
         #print response
         soup = BeautifulSoup(response)

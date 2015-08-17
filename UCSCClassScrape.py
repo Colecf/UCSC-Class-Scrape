@@ -8,7 +8,7 @@ import json
 from sets import Set
 #For jsonifying python dates to javascript format
 #http://stackoverflow.com/questions/455580/json-datetime-between-python-and-javascript
-def handler(obj):
+def jsonHandler(obj):
 	if hasattr(obj, 'isoformat'):
 		return obj.isoformat()
 	elif isinstance(obj, Class):
@@ -87,9 +87,11 @@ def _sanitizeTerm(term, soup):
     return term
 
 def _sanitizeStatus(regStatus):
-    if regStatus.lower() == "open" or regStatus.lower() == "o":
+    if regStatus.lower() in ["open", "o"]:
         return "O"
-    return "all"
+    if regStatus.lower() in ["all", "a"]:
+        return "all"
+    return False
 
 subjects = Set(['ACEN', 'AMST', 'ANTH', 'APLX', 'AMS', 'ARAB', 'ART', 'ARTG',
                 'ASTR', 'BIOC', 'BIOL', 'BIOE', 'BME', 'CHEM', 'CHIN', 'CLEI',
@@ -121,7 +123,25 @@ def _sanitizeCourseNum(courseNum):
     else:
         return "=" + courseNum
 
-def readClasses(term, regStatus='all', subject='all', title="", courseNum="", verbose=False):
+def _sanitizeInstructor(instructor):
+    if len(instructor) == 0:
+        return instructor
+    if instructor[:1] in ['=', '~', '^']:
+        return instructor
+    else:
+        return '='+instructor
+        
+ges = Set(['A', 'C', 'C1', 'C2', 'CC', 'E', 'ER', 'IH', 'IM', 'IN', 'IS', 'MF', 'PE-E', 'PE-H',
+           'PE-T', 'PR-C', 'PR-E', 'PR-E', 'PR-S', 'Q', 'SI', 'SR', 'TA', 'TH', 'TN', 'TS', 'W'])
+def _sanitizeGE(ge):
+    if ge=='' or ge in ges:
+        return ge
+    if ge.lower() in ['all', 'a', 'any']:
+        return "AnyGE"
+    return False
+    
+def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
+                instructor="", ge="", verbose=False):
     br.open('https://pisa.ucsc.edu/class_search/')
     soup = BeautifulSoup(br.response().read())
     
@@ -129,7 +149,9 @@ def readClasses(term, regStatus='all', subject='all', title="", courseNum="", ve
     regStatus = _sanitizeStatus(regStatus)
     subject = _sanitizeSubject(subject)
     courseNum = _sanitizeCourseNum(courseNum)
-
+    instructor = _sanitizeInstructor(instructor)
+    ge = _sanitizeGE(ge)
+    
     if (term and regStatus and subject and title and courseNum) == False:
         return False
     
@@ -143,7 +165,9 @@ def readClasses(term, regStatus='all', subject='all', title="", courseNum="", ve
         # (and they won't let you submit with it selected)
         # and the second is 'all subjects', which we want.
         br.find_control('binds[:subject]').get(nr=1).selected = True
-
+    else:
+        br['binds[:subject]'] = [subject]
+        
     if len(courseNum) > 0:
         firstChar = courseNum[:1]
         if firstChar == "<" or firstChar == ">":
@@ -154,14 +178,27 @@ def readClasses(term, regStatus='all', subject='all', title="", courseNum="", ve
             br['binds[:catalog_nbr_op]'] = ["contains"]
 
         br['binds[:catalog_nbr]'] = courseNum[1:]    
-            
+
+    if len(instructor) > 0:
+        firstChar = instructor[:1]
+        if firstChar == "~":
+            br['binds[:instr_name_op]'] = ["contains"]
+        elif firstChar == "^":
+            br['binds[:instr_name_op]'] = ["begins"]
+        else:
+            br['binds[:instr_name_op]'] = ["="]
+
+        br['binds[:instructor]'] = instructor[1:]
+        
+    if len(ge) > 0:
+        br['binds[:ge]'] = [ge]
         
     termString = ""
     for termOption in soup.find('select', id='term_dropdown').findAll('option'):
         if termOption['value'] == term:
             termString = termOption.getText()
             break
-    
+
     classes = []
     response = "next</a>"
     pageCount = 0
@@ -169,6 +206,9 @@ def readClasses(term, regStatus='all', subject='all', title="", courseNum="", ve
     while "next</a>" in response:
         response = br.submit().read()
         soup = BeautifulSoup(response)
+
+        if "returned no matches." in response:
+            break
         
         if pageCount == 0:
             totalClasses = int(soup.find('td', colspan="13").find_all('b')[2].getText())
@@ -312,4 +352,4 @@ if __name__ == "__main__":
     classes = readClasses(term=sys.argv[1], verbose=True)
 
     f = open('classes.json', 'w')
-    f.write(json.dumps(classes, default=handler))
+    f.write(json.dumps(classes, default=jsonHandler))

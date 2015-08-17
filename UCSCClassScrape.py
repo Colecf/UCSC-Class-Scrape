@@ -152,7 +152,7 @@ def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
     instructor = _sanitizeInstructor(instructor)
     ge = _sanitizeGE(ge)
     
-    if (term and regStatus and subject and title and courseNum) == False:
+    if (term and regStatus and subject and title and courseNum and title and instructor and ge) == False:
         return False
     
     br.select_form(name='searchForm')

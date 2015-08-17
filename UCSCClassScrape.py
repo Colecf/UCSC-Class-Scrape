@@ -111,15 +111,26 @@ def _sanitizeSubject(subject):
         return subject
     return False
 
-def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
+def _sanitizeCourseNum(courseNum):
+    if len(courseNum) == 0:
+        return courseNum
+    firstChar = courseNum[:1]
+    
+    if firstChar in ["=", "<", ">", "~"]:
+        return courseNum
+    else:
+        return "=" + courseNum
+
+def readClasses(term, regStatus='all', subject='all', title="", courseNum="", verbose=False):
     br.open('https://pisa.ucsc.edu/class_search/')
     soup = BeautifulSoup(br.response().read())
     
     term = _sanitizeTerm(term, soup)
     regStatus = _sanitizeStatus(regStatus)
     subject = _sanitizeSubject(subject)
+    courseNum = _sanitizeCourseNum(courseNum)
 
-    if term==False or regStatus==False or subject==False:
+    if (term and regStatus and subject and title and courseNum) == False:
         return False
     
     br.select_form(name='searchForm')
@@ -132,7 +143,19 @@ def readClasses(term, regStatus='all', subject='all', title="", verbose=False):
         # (and they won't let you submit with it selected)
         # and the second is 'all subjects', which we want.
         br.find_control('binds[:subject]').get(nr=1).selected = True
-    
+
+    if len(courseNum) > 0:
+        firstChar = courseNum[:1]
+        if firstChar == "<" or firstChar == ">":
+            firstChar = firstChar + "="
+        if firstChar != "~":
+            br['binds[:catalog_nbr_op]'] = [firstChar]
+        else:
+            br['binds[:catalog_nbr_op]'] = ["contains"]
+
+        br['binds[:catalog_nbr]'] = courseNum[1:]    
+            
+        
     termString = ""
     for termOption in soup.find('select', id='term_dropdown').findAll('option'):
         if termOption['value'] == term:

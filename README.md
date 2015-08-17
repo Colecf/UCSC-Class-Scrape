@@ -1,5 +1,5 @@
 # UCSC-Class-Scrape
-A python library for scraping UCSC classes from the website.
+A python library for scraping UCSC classes from the class search page.
 
 Requires BeautifulSoup4 and Mechanize. For python 2.7.
 

@@ -9,14 +9,14 @@ from sets import Set
 #For jsonifying python dates to javascript format
 #http://stackoverflow.com/questions/455580/json-datetime-between-python-and-javascript
 def jsonHandler(obj):
-	if hasattr(obj, 'isoformat'):
-		return obj.isoformat()
-	elif isinstance(obj, Class):
-		return obj.__dict__
-	elif isinstance(obj, Day):
-		return obj.__dict__
-	else:
-		raise TypeError, 'Object of type %s with value of %s is not JSON serializable' % (type(obj), repr(obj))
+    if hasattr(obj, 'isoformat'):
+	return obj.isoformat()
+    elif isinstance(obj, Class):
+	return obj.__dict__
+    elif isinstance(obj, Day):
+	return obj.__dict__
+    else:
+	raise TypeError, 'Object of type %s with value of %s is not JSON serializable' % (type(obj), repr(obj))
 
 br = mechanize.Browser()
 
@@ -141,7 +141,7 @@ def _sanitizeGE(ge):
     return False
     
 def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
-                instructor="", ge="", verbose=False):
+                instructor="", ge="", verbose=False, details=False):
     br.open('https://pisa.ucsc.edu/class_search/')
     soup = BeautifulSoup(br.response().read())
     
@@ -211,87 +211,83 @@ def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
             break
         
         if pageCount == 0:
-            totalClasses = int(soup.find('td', colspan="13").find_all('b')[2].getText())
+            totalClasses = int(soup.select('.hide-print')[0].find_all('b')[2].getText())
         
-        tbody = soup.find('td', class_='even').parent.parent
-
-        for tr in tbody.find_all('tr'):
+        container = soup.select('.center-block > .panel-body')[0]
+        for row in container.find_all('div', class_="panel"):
             collumn = 0
             c = Class()
             repeat = False
-            for td in tr.find_all('td'):
-                if collumn==0:
-                    if len(classes) != 0 and int(td.a.getText()) == classes[-1].classNum:
-                        c = classes.pop()  # some classes meet on odd days and thus have multiple rows
-                        repeat = True
-                    c.classLink = "https://pisa.ucsc.edu/class_search/"+td.a['href']
-                    c.classNum = int(td.a.getText())
-                elif collumn==1:
-                    c.classID = td.getText()
-                elif collumn==2:
-                    c.classTitle = td.a.getText()
-                elif collumn==3:
-                    c.classType = td.getText()
-                elif collumn==4: # and collumn 5 technically
-                    dayStartTime = ""
-                    dayEndTime = ""
-                    timesString = tr.find_all('td')[5].getText()
-                    if ":" in timesString:
-                        times = timesString.split("-")
-                        startTimes = times[0].split(":")
-                        endTimes = times[1].split(":")
-                        hour = int(startTimes[0])
-                        if times[0][-2] == "A" and hour == 12:
-                            hour = 0
-                        elif times[0][-2] == "P" and hour != 12:
-                            hour = hour + 12
-                        dayStartTime = datetime.time(hour, int(startTimes[1][:2]))
-                        hour = int(endTimes[0])
-                        if times[1][-2] == "A" and hour == 12:
-                            hour = 0
-                        elif times[1][-2] == "P" and hour != 12:
-                            hour = hour + 12
-                        dayEndTime = datetime.time(hour, int(endTimes[1][:2]))
-                    else:
-                        dayStartTime = datetime.time(0, 0)
-                        dayEndTime = datetime.time(0, 0)
-                    #Split by capital letters
-                    days = re.findall(r'[A-Z][^A-Z]*', td.getText())
-                    for day in days:
-                        d = Day()
-                        if day == "M":
-                            d.day = 0
-                        if day == "Tu":
-                            d.day = 1
-                        if day == "W":
-                            d.day = 2
-                        if day == "Th":
-                            d.day = 3
-                        if day == "F":
-                            d.day = 4
-                        if day == "Sa":
-                            d.day = 5
-                        if day == "Su":
-                            d.day = 6
-                        d.startTime = dayStartTime
-                        d.endTime = dayEndTime
-                        c.days.append(d)
-                elif collumn==6:
-                    c.instructor = td.getText()
-                elif collumn==7:
-                    c.status = td.center.img['alt']
-                elif collumn==8:
-                    c.capacity = int(td.getText())
-                elif collumn==9:
-                    c.enrolled = int(td.getText())
-                #skip 10 because available seats can be calculated
-                elif collumn==11:
-                    c.location = td.getText()
-                elif collumn==12:
-                    c.materialsLink = td.input['onclick'][13:-12]
-                collumn=collumn+1
+            heading = row.find('div', class_='panel-heading')
+            c.classLink = "https://pisa.ucsc.edu/class_search/"+heading.find('a')['href'];
+            c.classID = heading.find('a').getText()
+            c.classTitle = heading.find_all('a')[1].getText()
+            c.status = heading.find('span').getText()
+
+            bodyrows = row.select('.panel-body > .row > div')
+            c.classNum = bodyrows[0].find('a').getText()
+            c.instructor = bodyrows[1].find(text=True, recursive=False).strip()
+            typeAndLoc = bodyrows[2].find(text=True, recursive=False).strip()
+            if typeAndLoc and ":" in typeAndLoc:
+                split = typeAndLoc.split(': ')
+                c.classType = split[0]
+                c.location = split[1]
+
+            peopleStr = bodyrows[4].getText().strip()
+            peopleStrSpace = peopleStr.find(' ')
+            peopleStrSpace2 = peopleStr.find(' ', peopleStrSpace+1)
+            c.enrolled = int(peopleStr[0:peopleStrSpace])
+            c.capacity = int(peopleStr[peopleStrSpace2+1:peopleStr.find(' ', peopleStrSpace2+1)])
+            c.materialsLink = bodyrows[5].find('a')['href']
+        
+            dayStartTime = ""
+            dayEndTime = ""
+            timesString = bodyrows[3].find(text=True, recursive=False).strip()
+            if len(timesString) > 3 and timesString.find('TBA') == -1:
+                #Split by capital letters
+                days = re.findall(r'[A-Z][^A-Z]*', timesString[0:timesString.find(' ')])
+                timesString = timesString[timesString.find(' ')+1:]
+                if ":" in timesString:
+                    times = timesString.split("-")
+                    startTimes = times[0].split(":")
+                    endTimes = times[1].split(":")
+                    hour = int(startTimes[0])
+                    if times[0][-2] == "A" and hour == 12:
+                        hour = 0
+                    elif times[0][-2] == "P" and hour != 12:
+                        hour = hour + 12
+                    dayStartTime = datetime.time(hour, int(startTimes[1][:2]))
+                    hour = int(endTimes[0])
+                    if times[1][-2] == "A" and hour == 12:
+                        hour = 0
+                    elif times[1][-2] == "P" and hour != 12:
+                        hour = hour + 12
+                    dayEndTime = datetime.time(hour, int(endTimes[1][:2]))
+                else:
+                    dayStartTime = datetime.time(0, 0)
+                    dayEndTime = datetime.time(0, 0)
+                for day in days:
+                    d = Day()
+                    if day == "M":
+                        d.day = 0
+                    if day == "Tu":
+                        d.day = 1
+                    if day == "W":
+                        d.day = 2
+                    if day == "Th":
+                        d.day = 3
+                    if day == "F":
+                        d.day = 4
+                    if day == "Sa":
+                        d.day = 5
+                    if day == "Su":
+                        d.day = 6
+                    d.startTime = dayStartTime
+                    d.endTime = dayEndTime
+                    c.days.append(d)
+
             
-            if not repeat:
+            if not repeat and details:
                 #Click the class link and read the units, ge's, and dates
                 infoPage = BeautifulSoup(urllib2.urlopen(c.classLink).read())
                 c.fullName = infoPage.find_all('table', class_="PALEVEL0SECONDARY")[0].find_all('tr')[1].td.getText().encode('ascii', 'ignore')
@@ -329,9 +325,10 @@ def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
                             #rows with actual data have the even or odd class
                             if tr.has_attr('class'):
                                 c.labs.append(int(tr.find_all('td')[2].getText()))
-            classes.append(c)
             if verbose:
                 print "Finished class "+str(c.classNum)+", the "+str(len(classes))+" of "+str(totalClasses)
+            if not repeat:
+                classes.append(c)
         br.select_form(name='resultsForm')
         br.form.set_all_readonly(False)
         br['action'] = "next"

@@ -143,7 +143,7 @@ def _sanitizeGE(ge):
     return False
     
 def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
-                instructor="", ge="", verbose=False, details=False):
+                instructor="", ge="", verbose=False, details=True):
     br.open('https://pisa.ucsc.edu/class_search/')
     soup = BeautifulSoup(br.response().read())
     

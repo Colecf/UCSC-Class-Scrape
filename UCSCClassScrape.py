@@ -59,10 +59,12 @@ class Class:
         self.status = ""
         self.capacity = 0
         self.enrolled = 0
+        self.onWaitlist = 0
+        self.waitlistCapacity = 0
         self.location = ""
         self.materialsLink = ""
         self.credits = 0
-        self.ge = ""
+        self.ge = []
         self.description = ""
         self.startDate = ""
         self.endDate = ""
@@ -289,29 +291,32 @@ def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
             
             if not repeat and details:
                 #Click the class link and read the units, ge's, and dates
-                infoPage = BeautifulSoup(urllib2.urlopen(c.classLink).read())
-                c.fullName = infoPage.find_all('table', class_="PALEVEL0SECONDARY")[0].find_all('tr')[1].td.getText().encode('ascii', 'ignore')
-                c.fullName = c.fullName[c.fullName.find('-')+5:]
-                
-                for table in infoPage.find_all('table', class_='detail_table'):
-                    tableTitle = table.find_all('tr')[0].th.getText()
-                    if tableTitle == "Class Details":
-                        c.credits = int(table.find_all('tr')[5].find_all('td')[1].getText()[0:1])
-                        # need the encode to ascii because of &nbsp;
-                        c.ge = table.find_all('tr')[6].find_all('td')[1].getText().encode('ascii', 'ignore')
-                        if c.ge == "":
-                            c.ge = []
-                        else:
-                            c.ge = c.ge.split(', ')
-                        c.career = table.find_all('tr')[1].find_all('td')[1].getText()
-                    if tableTitle == "Description":
-                        c.description = table.find_all('tr')[1].td.getText()
-                    if tableTitle == "Enrollment Requirements":
-                        c.enrollmentReqs = table.find_all('tr')[1].td.getText()
-                    if tableTitle == "Class Notes":
-                        c.classNotes = table.find_all('tr')[1].td.getText()
-                    if tableTitle == "Meeting Information":
-                        dateString = table.find_all('tr')[2].find_all('td')[3].getText()
+                #There's some broken random </spans> that break beautifulsoup
+                html = urllib2.urlopen(c.classLink).read().replace("</span>", "")
+                infoPage = BeautifulSoup(html)
+                #c.fullName = infoPage.find_all('table', class_="PALEVEL0SECONDARY")[0].find_all('tr')[1].td.getText().encode('ascii', 'ignore')
+                #c.fullName = c.fullName[c.fullName.find('-')+5:]
+
+                panels = infoPage.select('.panel-group > .panel > .panel-body')
+                rows = panels[0].find_all('dd')
+                print panels[0]
+                c.career = rows[0].getText()
+                c.grading = rows[1].getText()
+                c.credits = rows[4].getText()
+                c.credits = int(c.credits[:c.credits.find(' ')])
+                c.ge = rows[5].getText().split(', ')
+                c.waitlistCapacity = int(rows[10].getText())
+                c.onWaitlist = int(rows[11].getText())
+                for panel in panels:
+                    title = panel.parent.find('div', class_='panel-heading').getText()
+                    if title == "Description":
+                        c.description = panel.getText().strip()
+                    elif title == "Enrollment Requirements":                        
+                        c.enrollmentReqs = panel.getText().strip()
+                    elif title == "Class Notes":                        
+                        c.classNotes = panel.getText().strip()
+                    elif title == "Meeting Information":
+                        dateString = panel.find_all('tr')[1].find_all('td')[3].getText()
                         if dateString.find('-') == -1:
                             c.startDate = ""
                             c.endDate = ""
@@ -320,15 +325,14 @@ def readClasses(term, regStatus='all', subject='all', courseNum="", title="",
                             endArray = dateString[dateString.find("-")+2:].split('/')
                             c.startDate = datetime.date(int(startArray[2])+2000, int(startArray[0]), int(startArray[1]))
                             c.endDate = datetime.date(int(endArray[2])+2000, int(endArray[0]), int(endArray[1]))
-                    if tableTitle == "Associated Discussion Sections or Labs":
-                        for tr in table.find_all('tr'):
-                            #rows with actual data have the even or odd class
-                            if tr.has_attr('class'):
-                                c.labs.append(int(tr.find_all('td')[2].getText()))
-            if verbose:
-                print "Finished class "+str(c.classNum)+", the "+str(len(classes))+" of "+str(totalClasses)
+                    elif title == "Associated Discussion Sections or Labs":
+                        for row in panel.find_all('div', class_="row"):
+                            c.labs.append(int(row.find_all('div')[0].getText()[1:6]))
+                    
             if not repeat:
                 classes.append(c)
+            if verbose:
+                print "Finished class "+str(c.classNum)+", the "+str(len(classes))+" of "+str(totalClasses)
         br.select_form(name='resultsForm')
         br.form.set_all_readonly(False)
         br['action'] = "next"

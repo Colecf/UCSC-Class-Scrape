@@ -11,7 +11,7 @@ Usage:
 import UCSCClassScrape as cs
 import json
 
-print json.dumps(cs.readClasses("2015 Fall"), default=cs.jsonHandler) # Returns all classses, will take a long time
+print json.dumps(cs.readClasses("2015 Fall", verbose=True), default=cs.jsonHandler) # Returns all classses, will take a long time
 print json.dumps(cs.readClasses("2015 Fall", instructor="Larrabee", verbose=True), default=cs.jsonHandler)
 ```
 
@@ -25,3 +25,4 @@ Currently supportly arguments, all but term are optional:
 * instructor: Must be a string that begins with =, ~, or ^. ~ means "contains" and ^ means "starts with".
 * ge: Must be a string that is one of the GE codes, (full list in UCSCClassScrape.ges) or "all"
 * verbose: Must be a boolean. Prints out extra debug info. Default False.
+* details: default True, wether or not to go to the class info page and get extra details about the class. When it's false, you won't get some information that can't be determined from the search results page, but when it's true you need to send another request for each class.
